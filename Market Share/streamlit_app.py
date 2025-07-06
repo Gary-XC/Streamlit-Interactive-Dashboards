@@ -1,9 +1,3 @@
-# streamlit_app.py
-# -----------------------------------------------------------
-# Interactive market-share dashboard (Retail example)
-# Now robust to missing default CSV – falls back to a file-uploader
-# *Underlying data table removed per user request*
-# -----------------------------------------------------------
 import streamlit as st
 import pandas as pd
 import altair as alt
@@ -12,7 +6,7 @@ from typing import Union, IO
 
 # ---------- page config ----------
 st.set_page_config(
-    page_title="Retail Market-Share dashboard",
+    page_title="Retail Market‑Share dashboard",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -23,15 +17,12 @@ DEFAULT_CSV = BASE_DIR / "alpha_vantage_retail_revenues.csv"
 
 @st.cache_data(show_spinner=False)
 def load_data(source: Union[str, Path, IO[bytes]]) -> pd.DataFrame:
-    """Read the CSV from *source* and add a Fiscal Year column."""
     df = pd.read_csv(source)
     df["Fiscal Date"] = pd.to_datetime(df["Fiscal Date"], errors="coerce")
     df["Fiscal Year"] = df["Fiscal Date"].dt.year
     return df
 
-# ------------------------------------------------------------------
-# Helper functions (matching notebook)
-# ------------------------------------------------------------------
+# ---------- helper functions ----------
 
 def Market_Share_Calculations(df: pd.DataFrame) -> pd.DataFrame:
     df = df.copy()
@@ -66,43 +57,50 @@ def plot_market_share_over_time(df: pd.DataFrame, focus: list[str]):
     )
 
 
-def plot_market_share_stacked_bar(df: pd.DataFrame, focus: list[str], year: int):
-    year_df = df[df["Fiscal Year"] == year].copy()
-    focus_mask = year_df["Ticker"].isin(focus)
-    df_focus = year_df[focus_mask]
-    df_other = year_df[~focus_mask]
+def plot_faceted_stacked_bar(df: pd.DataFrame, focus: list[str], yr_min: int, yr_max: int, max_cols: int = 6):
+    """Return a **faceted stacked bar** chart – one 100 %‑width bar for each
+    fiscal year in *[yr_min, yr_max]*. Tickers outside *focus* collapse into
+    an *Other* segment so the set of colours stays readable.
+    """
+    subset = df[(df["Fiscal Year"] >= yr_min) & (df["Fiscal Year"] <= yr_max)].copy()
+    subset["Ticker"] = subset["Ticker"].where(subset["Ticker"].isin(focus), "Other")
+    subset["Bar"] = "Share"  # constant, so each facet has exactly one bar
 
-    other_share = df_other["Market Share"].sum()
-    if other_share > 0:
-        df_focus = pd.concat(
-            [
-                df_focus,
-                pd.DataFrame({"Ticker": ["Other"], "Market Share": [other_share], "Fiscal Year": [year]}),
-            ],
-            ignore_index=True,
-        )
+    # Preserve chronological order in facet headers
+    year_order = list(range(yr_min, yr_max + 1))
 
-    order = (
-        df_focus[df_focus["Ticker"] != "Other"].sort_values("Market Share", ascending=False)["Ticker"].tolist()
-    )
-    if "Other" in df_focus["Ticker"].values:
-        order.append("Other")
-
-    return (
-        alt.Chart(df_focus)
+    chart = (
+        alt.Chart(subset)
         .mark_bar()
         .encode(
-            y=alt.Y("Ticker:N", sort=order),
-            x=alt.X("Market Share:Q", axis=alt.Axis(format=".0%")),
-            color=alt.Color("Ticker:N", legend=None),
-            tooltip=["Ticker", alt.Tooltip("Market Share:Q", format=".2%")],
+            y=alt.Y("Bar:N", axis=None),
+            x=alt.X(
+                "Market Share:Q",
+                stack="normalize",
+                axis=alt.Axis(format=".0%", title="Market Share"),
+            ),
+            color=alt.Color("Ticker:N", legend=alt.Legend(title="Ticker")),
+            tooltip=[
+                "Fiscal Year:O",
+                "Ticker",
+                alt.Tooltip("Market Share:Q", format=".2%"),
+            ],
         )
-        .properties(height=max(300, 25 * len(df_focus)))
+        .facet(
+            column=alt.Column(
+                "Fiscal Year:O",
+                sort=year_order,
+                title="Fiscal Year",
+                header=alt.Header(labelAngle=0),
+            ),
+            columns=max_cols,
+            spacing=5,
+        )
+        .properties(height=120)
     )
+    return chart
 
-# ------------------------------------------------------------------
-# Data acquisition – try default path, else request upload
-# ------------------------------------------------------------------
+# ---------- load data ----------
 try:
     df_raw = load_data(DEFAULT_CSV)
 except FileNotFoundError:
@@ -116,9 +114,7 @@ except FileNotFoundError:
 
 market = Market_Share_Calculations(df_raw)
 
-# ------------------------------------------------------------------
-# Sidebar controls
-# ------------------------------------------------------------------
+# ---------- sidebar controls ----------
 all_tickers = sorted(market["Ticker"].unique())
 sel_tickers = st.sidebar.multiselect(
     "Focus companies (highlight individually)",
@@ -129,27 +125,27 @@ sel_tickers = st.sidebar.multiselect(
 years = sorted([int(y) for y in market["Fiscal Year"].dropna().unique()])
 
 yr_min, yr_max = st.sidebar.slider(
-    "Year range (for line chart)",
-    min_value=min(years),
-    max_value=max(years),
-    value=(min(years), max(years)),
+    "Year range", min_value=min(years), max_value=max(years), value=(min(years), max(years))
 )
 
-chart_style = st.sidebar.radio("Chart type", ["Market share over time", "Stacked share by year"])
+chart_style = st.sidebar.radio(
+    "Chart type",
+    [
+        "Market share over time",
+        "Faceted stacked bar (by year)",
+    ],
+)
 
-# ------------------------------------------------------------------
-# Main content
-# ------------------------------------------------------------------
-st.title("Retail market-share explorer")
-
+# ---------- filter data ----------
 filtered = market[(market["Fiscal Year"] >= yr_min) & (market["Fiscal Year"] <= yr_max)].copy()
+
+# ---------- main content ----------
+st.title("Retail market‑share explorer")
 
 if chart_style == "Market share over time":
     st.altair_chart(plot_market_share_over_time(filtered, sel_tickers), use_container_width=True)
 else:
-    sel_year = st.sidebar.selectbox("Year for stacked bar", years, index=years.index(yr_max))
-    st.altair_chart(plot_market_share_stacked_bar(market, sel_tickers, int(sel_year)), use_container_width=True)
-
-# ------------------------------------------------------------------
-# Underlying data display removed as per request
-# ------------------------------------------------------------------
+    st.altair_chart(
+        plot_faceted_stacked_bar(market, sel_tickers, yr_min, yr_max),
+        use_container_width=True,
+    )
