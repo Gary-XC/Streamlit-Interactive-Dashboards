@@ -57,28 +57,24 @@ def plot_market_share_over_time(df: pd.DataFrame, focus: list[str]):
     )
 
 
-def plot_faceted_stacked_bar(df: pd.DataFrame, focus: list[str], yr_min: int, yr_max: int, max_cols: int = 6):
-    """Return a **faceted stacked bar** chart – one 100 %‑width bar for each
-    fiscal year in *[yr_min, yr_max]*. Tickers outside *focus* collapse into
-    an *Other* segment so the set of colours stays readable.
-    """
+def plot_yearly_stacked_bars_vertical(df: pd.DataFrame, focus: list[str], yr_min: int, yr_max: int):
+    """One 100 % stacked bar **per fiscal year**, arranged vertically."""
     subset = df[(df["Fiscal Year"] >= yr_min) & (df["Fiscal Year"] <= yr_max)].copy()
+
+    # Collapse non‑focus tickers into "Other" to keep colour legend concise
     subset["Ticker"] = subset["Ticker"].where(subset["Ticker"].isin(focus), "Other")
-    subset["Bar"] = "Share"  # constant, so each facet has exactly one bar
+    subset["Bar"] = "Share"  # constant nominal field for bar height control
 
-    # Preserve chronological order in facet headers
-    year_order = list(range(yr_min, yr_max + 1))
-
-    chart = (
+    base = (
         alt.Chart(subset)
         .mark_bar()
         .encode(
-            y=alt.Y("Bar:N", axis=None),
             x=alt.X(
                 "Market Share:Q",
                 stack="normalize",
                 axis=alt.Axis(format=".0%", title="Market Share"),
             ),
+            y=alt.Y("Bar:N", axis=None),  # hide y‑axis — single bar row
             color=alt.Color("Ticker:N", legend=alt.Legend(title="Ticker")),
             tooltip=[
                 "Fiscal Year:O",
@@ -86,26 +82,27 @@ def plot_faceted_stacked_bar(df: pd.DataFrame, focus: list[str], yr_min: int, yr
                 alt.Tooltip("Market Share:Q", format=".2%"),
             ],
         )
-        .facet(
-            column=alt.Column(
-                "Fiscal Year:O",
-                sort=year_order,
-                title="Fiscal Year",
-                header=alt.Header(labelAngle=0),
-            ),
-            columns=max_cols,
-            spacing=5,
-        )
-        .properties(height=120)
+        .properties(height=40)  # compact row height
     )
-    return chart
+
+    # Facet vertically (row) so each year stacks **on top of** the next
+    facet_chart = base.facet(
+        row=alt.Row(
+            "Fiscal Year:O",
+            sort=list(range(yr_max, yr_min - 1, -1)),  # newest at top
+            header=alt.Header(labelAngle=0, labelAlign="right", title="Fiscal Year"),
+        ),
+        spacing=4,
+    )
+
+    return facet_chart
 
 # ---------- load data ----------
 try:
     df_raw = load_data(DEFAULT_CSV)
 except FileNotFoundError:
     st.sidebar.warning(
-        f"Default data file not found at '{DEFAULT_CSV}'.\n" "Please upload the CSV exported from Alpha Vantage."
+        f"Default data file not found at '{DEFAULT_CSV}'.\nPlease upload the CSV exported from Alpha Vantage."
     )
     uploaded = st.sidebar.file_uploader("Upload alpha_vantage_retail_revenues.csv", type="csv")
     if uploaded is None:
@@ -132,7 +129,7 @@ chart_style = st.sidebar.radio(
     "Chart type",
     [
         "Market share over time",
-        "Faceted stacked bar (by year)",
+        "Stacked bars (vertical by year)",
     ],
 )
 
@@ -146,6 +143,6 @@ if chart_style == "Market share over time":
     st.altair_chart(plot_market_share_over_time(filtered, sel_tickers), use_container_width=True)
 else:
     st.altair_chart(
-        plot_faceted_stacked_bar(market, sel_tickers, yr_min, yr_max),
+        plot_yearly_stacked_bars_vertical(market, sel_tickers, yr_min, yr_max),
         use_container_width=True,
     )
