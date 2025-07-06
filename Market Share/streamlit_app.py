@@ -4,6 +4,11 @@ import altair as alt
 from pathlib import Path
 from typing import Union, IO
 
+###
+# Note, have to update individual Apps on StreamLit's Website
+# https://share.streamlit.io/
+###
+
 # ---------- page config ----------
 st.set_page_config(
     page_title="Retail Market‑Share dashboard",
