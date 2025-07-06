@@ -13,6 +13,11 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+st.markdown(
+    "<h1 style='text-align:center;'>Market Share Dashboard</h1>",
+    unsafe_allow_html=True,
+)
+
 # ---------- data loader ----------
 BASE_DIR = Path(__file__).parent
 DEFAULT_CSV = BASE_DIR / "Data" / "StreamLit Data.csv"
@@ -33,12 +38,7 @@ def top_companies(df: pd.DataFrame, top_n: int = 5) -> List[str]:
 # ---------- Altair line chart ----------
 
 def plot_market_share_over_time(df: pd.DataFrame, focus: List[str]):
-    long_df = (
-        df[df["Ticker"].isin(focus)]
-        .pivot_table(index="Fiscal Date", columns="Ticker", values="Market Share")
-        .reset_index()
-        .melt(id_vars="Fiscal Date", var_name="Ticker", value_name="Market Share")
-    )
+    long_df = df[df["Ticker"].isin(focus)].copy()
     return (
         alt.Chart(long_df)
         .mark_line(point=True)
@@ -150,16 +150,20 @@ market = df_raw
 
 # ---------- sidebar controls ----------
 all_tickers = sorted(market["Ticker"].unique())
-sel_tickers = st.sidebar.multiselect(
-    "Focus companies (highlight individually)",
-    options=all_tickers,
-    default=top_companies(market, 5) if len(all_tickers) >= 5 else all_tickers,
-)
+top_n = int(st.sidebar.number_input(
+    "Number of top companies to highlight",
+    min_value=1,
+    max_value=len(all_tickers),
+    value=5,
+    step=1
+))
+
+sel_tickers = top_companies(market, top_n)
 
 years_available = sorted([int(y) for y in market["Fiscal Year"].dropna().unique()])
 
 years_selected = st.sidebar.multiselect(
-    "Fiscal years to plot (stacked bar)",
+    "Select Fiscal Years",
     options=years_available[::-1],
     default=years_available[-3:][::-1],
 )
@@ -175,7 +179,7 @@ chart_style = st.sidebar.radio(
     "Chart type",
     [
         "Market share over time",
-        "Stacked bar (matplotlib)",
+        "Stacked Bar",
     ],
 )
 
