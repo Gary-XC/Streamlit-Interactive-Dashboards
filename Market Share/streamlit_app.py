@@ -72,6 +72,10 @@ def plot_market_share_stacked_bar(
     # ---------- choose focus tickers ------------------------------------
     focus_mask = df["Ticker"].isin(include_tickers) if include_tickers is not None else pd.Series(True, index=df.index)
     df_focus = df[focus_mask]
+    
+    if df_focus.empty:
+        st.warning("No data available for the selected years and companies.")
+        return None  # Skip plotting
 
     # ---------- aggregate ----------------------------------------------
     yearly_focus = (
@@ -193,4 +197,5 @@ if chart_style == "Market share over time":
     st.altair_chart(plot_market_share_over_time(filtered_range, sel_tickers), use_container_width=True)
 else:
     fig = plot_market_share_stacked_bar(market, years_selected, include_tickers=sel_tickers)
-    st.pyplot(fig, use_container_width=True)
+    if fig:
+        st.pyplot(fig, use_container_width=True)
