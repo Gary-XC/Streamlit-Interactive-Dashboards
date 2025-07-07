@@ -4,7 +4,7 @@ import altair as alt
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
 from pathlib import Path
-from typing import Union, IO, List, Optional
+from typing import Union, IO, List, Optional, cast
 
 # ---------- page config ----------
 st.set_page_config(
@@ -20,19 +20,18 @@ st.markdown(
 
 # ---------- data loader ----------
 BASE_DIR = Path(__file__).parent
-DEFAULT_CSV = BASE_DIR / "Data" / "StreamLit Data.csv"
+DEFAULT_CSV = BASE_DIR / "Data" / "rStreamLitData.csv"
 
 @st.cache_data(show_spinner=False)
 def load_data(source: Union[str, Path, IO[bytes]]) -> pd.DataFrame:
     df = pd.read_csv(source)
-    df["Fiscal Date"] = pd.to_datetime(df["Fiscal Date"], errors="coerce")
-    df["Fiscal Year"] = df["Fiscal Date"].dt.year
     return df
 
 def top_companies(df: pd.DataFrame, top_n: int = 5) -> List[str]:
     return (
         df.groupby("Ticker")["Market Share"].mean().sort_values(ascending=False).head(top_n).index.tolist()
     )
+
 
 
 # ---------- Altair line chart ----------
@@ -43,10 +42,10 @@ def plot_market_share_over_time(df: pd.DataFrame, focus: List[str]):
         alt.Chart(long_df)
         .mark_line(point=True)
         .encode(
-            x="Fiscal Date:T",
+            x="Fiscal Year:T",
             y=alt.Y("Market Share:Q", axis=alt.Axis(format=".0%")),
             color="Ticker:N",
-            tooltip=["Fiscal Date:T", "Ticker", alt.Tooltip("Market Share:Q", format=".2%")],
+            tooltip=["Fiscal Year:T", "Ticker", alt.Tooltip("Market Share:Q", format=".2%")],
         )
         .properties(height=450)
         .interactive()
@@ -62,12 +61,11 @@ def plot_market_share_stacked_bar(
 
     # ---------- filtering -------------------------------------------------
     df = data.copy()
-    df["Fiscal Date"] = pd.to_datetime(df["Fiscal Date"])
-    df["Year"] = df["Fiscal Date"].dt.year
+
 
     if years is not None:
         years = [years] if isinstance(years, int) else list(years)
-        df = df[df["Year"].isin(years)]
+        df = df[df["Fiscal Year"].isin(years)]
 
     # ---------- choose focus tickers ------------------------------------
     focus_mask = df["Ticker"].isin(include_tickers) if include_tickers is not None else pd.Series(True, index=df.index)
@@ -79,10 +77,10 @@ def plot_market_share_stacked_bar(
 
     # ---------- aggregate ----------------------------------------------
     yearly_focus = (
-        df_focus.groupby(["Year", "Ticker"], as_index=False)[value_col].mean()
+        df_focus.groupby(["Fiscal Year", "Ticker"], as_index=False)[value_col].mean()
     )
     pivot_focus = (
-        yearly_focus.pivot(index="Year", columns="Ticker", values=value_col).fillna(0)
+        yearly_focus.pivot(index="Fiscal Year", columns="Ticker", values=value_col).fillna(0)
     )
 
     # ---------- add the “Other” bucket ----------------------------------
@@ -186,6 +184,28 @@ chart_style = st.sidebar.radio(
         "Stacked Bar",
     ],
 )
+
+company_options = sorted(market["Ticker"].unique())
+sel_company = st.sidebar.selectbox("Company", company_options)
+
+year_options = sorted(market["Fiscal Year"].dropna().unique(), reverse=True)
+sel_year = st.sidebar.selectbox("Fiscal Year", year_options)
+
+mask = (
+    (market["Ticker"] == sel_company)
+    & (market["Fiscal Year"] == sel_year)
+)
+
+filtered = cast(pd.Series, market.loc[mask, "Market Share"])         
+
+if len(filtered):                                    
+    share_pct = float(filtered.iloc[0]) * 100        
+    st.sidebar.metric(
+        label=f"{sel_company} market share in {sel_year}",
+        value=f"{share_pct:.2f} %",
+    )
+else:
+    st.sidebar.info("No data for that company + year combination.")
 
 # ---------- filter data for line chart ----------
 filtered_range = market[(market["Fiscal Year"] >= yr_min) & (market["Fiscal Year"] <= yr_max)].copy()
