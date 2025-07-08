@@ -1,2 +1,5 @@
 Note.txt
+.env
 .vscode
+Market Share/YuPengData/Data/*.csv
+Market Share/YuPengData/master_revenue_data.csv
