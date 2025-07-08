@@ -1,0 +1,2 @@
+1. Since different companies release their data in different months, can't filter based on month and days, have to convert all the days and months into a single year: fiscal year
+2. 

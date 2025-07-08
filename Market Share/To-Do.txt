@@ -1,0 +1,6 @@
+To Do:
+- add a pie chart to show the percentages of all companies for a single user-specified year - 7/7
+- Add a section for a analysis tab of the trends - 7/7
+
+Done:
+7/7 - added a spotlight for single user-specified stocks on single user-specified year - 7/6
