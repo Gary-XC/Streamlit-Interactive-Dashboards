@@ -96,7 +96,7 @@ def plot_market_share_stacked_bar(
     plt.style.use("dark_background")  #"ggplot", "fivethirtyeight", Dark Modes: Solarize_Light2, dark_background
 
     # Generating a colormap
-    cmap = cm.get_cmap('tab20')  # other options 'Set3', 'Paired', 'Accent', 'Pastel1'
+    cmap = cm.get_cmap('tab20')  # other options 'Set3', 'Paired', 'Accent', 'Pastel1', 'tab20'
     n_colors = len(pivot_focus.columns)
     colors = [cmap(i) for i in range(n_colors)]
 
