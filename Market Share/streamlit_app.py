@@ -3,12 +3,14 @@ import pandas as pd
 import altair as alt
 import matplotlib.pyplot as plt
 from matplotlib.ticker import PercentFormatter
+import matplotlib.cm as cm
 from pathlib import Path
 from typing import Union, IO, List, Optional, cast
+import seaborn as sns
 
-# ---------- page config ----------
+
 st.set_page_config(
-    page_title="Retail Market-Share dashboard",
+    page_title="Market-Share dashboard",
     layout="wide",
     initial_sidebar_state="expanded",
 )
@@ -18,7 +20,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-# ---------- data loader ----------
 BASE_DIR = Path(__file__).parent
 DEFAULT_CSV = BASE_DIR / "Data" / "rStreamLitData.csv"
 
@@ -34,7 +35,6 @@ def top_companies(df: pd.DataFrame, top_n: int = 5) -> List[str]:
 
 
 
-# ---------- Altair line chart ----------
 
 def plot_market_share_over_time(df: pd.DataFrame, focus: List[str]):
     long_df = df[df["Ticker"].isin(focus)].copy()
@@ -57,9 +57,7 @@ def plot_market_share_stacked_bar(
     include_tickers: Optional[List[str]] = None,
     value_col: str = "Market Share",
 ):
-    """Return a matplotlib Figure with horizontal stacked bars (one per year)."""
 
-    # ---------- filtering -------------------------------------------------
     df = data.copy()
 
 
@@ -67,15 +65,14 @@ def plot_market_share_stacked_bar(
         years = [years] if isinstance(years, int) else list(years)
         df = df[df["Fiscal Year"].isin(years)]
 
-    # ---------- choose focus tickers ------------------------------------
     focus_mask = df["Ticker"].isin(include_tickers) if include_tickers is not None else pd.Series(True, index=df.index)
     df_focus = df[focus_mask]
     
     if df_focus.empty:
         st.warning("No data available for the selected years and companies.")
-        return None  # Skip plotting
+        return None  # Skip plotting for years when there is no values
+    
 
-    # ---------- aggregate ----------------------------------------------
     yearly_focus = (
         df_focus.groupby(["Fiscal Year", "Ticker"], as_index=False)[value_col].mean()
     )
@@ -83,12 +80,10 @@ def plot_market_share_stacked_bar(
         yearly_focus.pivot(index="Fiscal Year", columns="Ticker", values=value_col).fillna(0)
     )
 
-    # ---------- add the “Other” bucket ----------------------------------
     other_share = 1.0 - pivot_focus.sum(axis=1)
     other_share = other_share.clip(lower=0)
     pivot_focus["Other"] = other_share
 
-    # ---------- order columns -------------------------------------------
     order = (
         pivot_focus.drop(columns="Other")
         .mean()
@@ -98,45 +93,49 @@ def plot_market_share_stacked_bar(
     )
     pivot_focus = pivot_focus[order]
 
-    # ---------- plotting -------------------------------------------------
-    fig, ax = plt.subplots(figsize=(10, 6))
-    pivot_focus.plot(kind="barh", stacked=True, ax=ax, legend=False)
+    plt.style.use("dark_background")  #"ggplot", "fivethirtyeight", Dark Modes: Solarize_Light2, dark_background
+
+    # Generating a colormap
+    cmap = cm.get_cmap('tab20')  # other options 'Set3', 'Paired', 'Accent', 'Pastel1'
+    n_colors = len(pivot_focus.columns)
+    colors = [cmap(i) for i in range(n_colors)]
+
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    pivot_focus.plot(kind="barh", stacked=True, ax=ax, color=colors, edgecolor='none')
 
     ax.xaxis.set_major_formatter(PercentFormatter(1.0))
-    ax.set_xlabel("Market Share (%)")
-    ax.set_ylabel("Fiscal Year")
-    ax.set_title("Market-Share Composition by Ticker")
+    ax.set_xlabel("Market Share (%)", fontsize=12)
+    ax.set_ylabel("Fiscal Year", fontsize=12)
+    ax.set_title("Market-Share Composition by Ticker", fontsize=14, fontweight="bold", pad=15)
+
+    ax.tick_params(axis="both", labelsize=10)
     ax.set_yticklabels(ax.get_yticklabels(), rotation=0)
 
-    # annotate segments
     for container in ax.containers:
         for patch in container:
             width = patch.get_width()
-            if width <= 0:
+            if width <= 0.03:
                 continue
-            x_pos = patch.get_x() + width / 2
-            y_pos = patch.get_y() + patch.get_height() / 2
-            ax.text(
-                x_pos,
-                y_pos,
-                f"{width*100:.1f}%",
-                ha="center",
-                va="center",
-                fontsize=8,
-            )
+            x = patch.get_x() + width / 2
+            y = patch.get_y() + patch.get_height() / 2
+            ax.text(x, y, f"{width*100:.1f}%", ha='center', va='center', fontsize=9)
 
     ax.legend(
         pivot_focus.columns,
         title="Ticker",
-        bbox_to_anchor=(1.04, 1),
+        bbox_to_anchor=(1.02, 1),
         loc="upper left",
         borderaxespad=0,
+        fontsize=9,
+        title_fontsize=10,
     )
 
     plt.tight_layout()
     return fig
 
-# ---------- load data ----------
+
+
 try:
     df_raw = load_data(DEFAULT_CSV)
 except FileNotFoundError:
@@ -207,11 +206,10 @@ if len(filtered):
 else:
     st.sidebar.info("No data for that company + year combination.")
 
-# ---------- filter data for line chart ----------
+# filtering the data for line chart
 filtered_range = market[(market["Fiscal Year"] >= yr_min) & (market["Fiscal Year"] <= yr_max)].copy()
 
-# ---------- main content ----------
-st.title("Retail market-share explorer")
+st.title("Market Share Dashboard")
 
 if chart_style == "Market share over time":
     st.altair_chart(plot_market_share_over_time(filtered_range, sel_tickers), use_container_width=True)
